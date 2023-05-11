@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Webcam Video Streaming</title>
+    <style>
+      #videoContainer {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+
+      video {
+        height: 50px;
+        width: 50%;
+        height: auto;
+        border: 3px solid green;
+        border-radius: 20px;
+        margin-top: 20px;
+      }
+      .recordedVideos {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .recordedVideo {
+        margin: 30px;
+      }
+      #recordButton {
+        color: white;
+        background-color: green;
+        height: 50px;
+        width: 150px;
+        font-weight: bold;
+        border: none;
+        cursor: pointer;
+        margin: auto;
+        margin-left: 45%;
+        margin-top: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1 style="text-align: center">Real Time Video Streaming Application</h1>
+    <div id="videoContainer">
+      <video id="video" autoplay></video>
+    </div>
+
+    <button id="recordButton">Record</button>
+    <div class="recordedVideos">
+      <!-- Videos appended  -->
+    </div>
+
+    <script src="https://cdn.socket.io/4.5.1/socket.io.min.js"></script>
+
+    <script>
+      const socket = io();
+
+      const video = document.getElementById("video");
+
+      // Get the user's webcam video
+      navigator.mediaDevices
+        .getUserMedia({ video: true })
+        .then((stream) => {
+          // Set the stream as the source of the video element
+          video.srcObject = stream;
+
+          // Send video frames to the backend
+          const videoTrack = stream.getVideoTracks()[0];
+          const imageCapture = new ImageCapture(videoTrack);
+
+          let isRecording = false;
+          let frames = [];
+
+          function startRecording() {
+            isRecording = true;
+            frames = [];
+
+            // Start capturing frames
+            setInterval(() => {
+              if (isRecording) {
+                imageCapture
+                  .grabFrame()
+                  .then((imageBitmap) => {
+                    // Convert the video frame to base64 or any desired format
+                    const canvas = document.createElement("canvas");
+                    canvas.width = imageBitmap.width;
+                    canvas.height = imageBitmap.height;
+                    const context = canvas.getContext("2d");
+                    context.drawImage(imageBitmap, 0, 0);
+                    const base64Data = canvas.toDataURL("image/jpeg");
+
+                    // Store the video frame in the frames array
+                    frames.push(base64Data);
+                    // console.log("sucessfully loaded");
+                  })
+                  .catch((error) => {
+                    console.error("Error grabbing frame:", error);
+                  });
+              }
+            }, 1000);
+          }
+
+          function stopRecording() {
+            isRecording = false;
+
+            // Send the frames to the backend for storage
+            socket.emit("storeVideo", frames);
+          }
+
+          // Handle the record button click event
+          const recordButton = document.getElementById("recordButton");
+          recordButton.addEventListener("click", () => {
+            if (!isRecording) {
+              startRecording();
+              recordButton.textContent = "Stop Recording";
+            } else {
+              stopRecording();
+              recordButton.textContent = "Record";
+            }
+          });
+
+          // Handle the received videos from the server
+          socket.on("sendRecordedVideos", (recordedVideos) => {
+            const recordedVideosContainer =
+              document.querySelector(".recordedVideos");
+
+            // Clear the existing videos
+            recordedVideosContainer.innerHTML = "";
+
+            // Iterate over the recorded videos and create video elements
+            recordedVideos.forEach((videoData) => {
+              const recordedVideoElement = document.createElement("video");
+              recordedVideoElement.src = videoData;
+              recordedVideoElement.controls = true;
+              recordedVideoElement.classList.add("recordedVideo");
+              recordedVideosContainer.appendChild(recordedVideoElement);
+            });
+          });
+        })
+        .catch((error) => {
+          console.error("Error accessing webcam:", error);
+        });
+    </script>
+  </body>
+</html>
